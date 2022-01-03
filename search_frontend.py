@@ -1,3 +1,5 @@
+import pickle
+
 from flask import Flask, request, jsonify
 
 class MyFlaskApp(Flask):
@@ -161,7 +163,15 @@ def get_pageview():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    # read in the counter
+    with open('pageviews - 202108 - user.pkl', 'rb') as f:
+        wid2pv = pickle.loads(f.read())
+    for pageID in wiki_ids:
+        try:
+            res.append(wid2pv[pageID])
+        except:
+            print("HEEEELLLOOOO !!!!!!! INVALID INPUT ! WHAT ARE U DOING ?!?!?!?!?!")
+            break
     # END SOLUTION
     return jsonify(res)
 
