@@ -1,6 +1,10 @@
 import pickle
+from collections import Counter
+from pathlib import Path
 
+import inverted_index_colab
 from flask import Flask, request, jsonify
+import wikipedia
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -33,6 +37,7 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+
     res=[tuple('Anarchism')]
     # END SOLUTION
     return jsonify(res)
@@ -85,6 +90,10 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
 
+    posting_lists = get_posting_lists(query,'index_title',base_dir='index_title')
+    #each element is (id,tf) and we want it to be --> (id,title)
+    res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
+
     # END SOLUTION
     return jsonify(res)
 
@@ -110,9 +119,14 @@ def search_anchor():
     query = request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
+
     # BEGIN SOLUTION
-    
+    posting_lists = get_posting_lists(query,'index_anchor',base_dir='index_anchor')
+    #each element is (id,tf) and we want it to be --> (id,title)
+    res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
+
     # END SOLUTION
+
     return jsonify(res)
 
 @app.route("/get_pagerank", methods=['POST'])
@@ -164,7 +178,7 @@ def get_pageview():
       return jsonify(res)
     # BEGIN SOLUTION
     # read in the counter
-    with open('pageviews - 202108 - user.pkl', 'rb') as f:
+    with open('pageviews-202108-user.pkl', 'rb') as f:
         wid2pv = pickle.loads(f.read())
     for pageID in wiki_ids:
         try:
@@ -174,6 +188,51 @@ def get_pageview():
             break
     # END SOLUTION
     return jsonify(res)
+
+
+def get_posting_lists(query,index_name,base_dir=''):
+    '''
+
+    :param query: input query
+    :param index_name: body/title/anchor_text
+    :param base_dir: path to the XXX.bin file
+    :return: posting list for this query, each element is tuple(wiki_id,query f)
+    '''
+    #loaods inverted index of title from dick or bucket or the god knows what
+    inverted_title = inverted_index_colab.InvertedIndex.read_index(base_dir, index_name)
+    #posting_lists = where each element is a tuple (wiki_id, tf)
+    posting_lists=[]
+    for word in query.split():
+        posting_list = read_posting_list(inverted_title, word,index_name)
+        posting_lists = posting_lists + posting_list
+
+    #convert posting_lists to Counter (we want to remove duplicates)
+    res = Counter()
+    for x in posting_lists:
+        res[x[0]] += x[1]
+
+    #sort posting lists to be ordered from best to worst
+    return res.most_common()
+
+
+TUPLE_SIZE = 6
+TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
+from contextlib import closing
+
+def read_posting_list(inverted, w,base_dir=''):
+  with closing(inverted_index_colab.MultiFileReader()) as reader:
+    try:
+        locs = inverted.posting_locs[w]
+        new_locs = [tuple((base_dir + '/' + locs[0][0],locs[0][1]))]
+        b = reader.read(new_locs, inverted.df[w] * TUPLE_SIZE)
+        posting_list = []
+        for i in range(inverted.df[w]):
+          doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4], 'big')
+          tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
+          posting_list.append((doc_id, tf))
+        return posting_list
+    except:
+        return []
 
 
 if __name__ == '__main__':
