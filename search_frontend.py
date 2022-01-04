@@ -92,8 +92,8 @@ def search_title():
 
     posting_lists = get_posting_lists(query,'index_title',base_dir='index_title')
     #each element is (id,tf) and we want it to be --> (id,title)
-    res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
-
+    #res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
+    res = list(map(lambda x: tuple((x[0], get_wiki_title_from_id(x[0]))), posting_lists))
     # END SOLUTION
     return jsonify(res)
 
@@ -123,7 +123,7 @@ def search_anchor():
     # BEGIN SOLUTION
     posting_lists = get_posting_lists(query,'index_anchor',base_dir='index_anchor')
     #each element is (id,tf) and we want it to be --> (id,title)
-    res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
+    res = list(map(lambda x:tuple((x[0],get_wiki_title_from_id(x[0])))),posting_lists)
 
     # END SOLUTION
 
@@ -189,6 +189,25 @@ def get_pageview():
     # END SOLUTION
     return jsonify(res)
 
+##############################  Help functions #########################
+import requests
+import bs4
+
+def get_wiki_title_from_id(wiki_id):
+    '''
+
+    :param wiki_id: page id
+    :return: page title
+    '''
+    url = "https://en.wikipedia.org/?curid="+str(wiki_id)
+
+    r = requests.get(url)
+    html = bs4.BeautifulSoup(r.text,features="lxml")
+    long_title = html.title.text
+    return long_title[:len(long_title)-12]
+
+
+##############################################
 
 def get_posting_lists(query,index_name,base_dir=''):
     '''
@@ -214,6 +233,7 @@ def get_posting_lists(query,index_name,base_dir=''):
     #sort posting lists to be ordered from best to worst
     return res.most_common()
 
+###########################################################
 
 TUPLE_SIZE = 6
 TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
