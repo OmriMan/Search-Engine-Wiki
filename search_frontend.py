@@ -287,7 +287,7 @@ def get_wiki_title_from_id(wiki_id):
 
 def get_posting_lists(query,index_name,base_dir=''):
     '''
-
+    Returns relevant postings lists for the given query
     :param query: input query
     :param index_name: body/title/anchor_text
     :param base_dir: path to the XXX.bin file
@@ -356,6 +356,9 @@ def tokenize(text):
     list_of_tokens = [token.group() for token in RE_WORD.finditer(text.lower()) if
                       token.group() not in all_stopwords]
     return list_of_tokens
+
+
+
 
 
 
