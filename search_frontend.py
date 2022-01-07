@@ -6,7 +6,7 @@ from pathlib import Path
 
 import inverted_index_colab
 from flask import Flask, request, jsonify, json
-
+import time
 
 from nltk.corpus import stopwords
 
@@ -37,30 +37,81 @@ def search():
         element is a tuple (wiki_id, title).
     '''
     res = []
-    res_body = []
-    res_title = []
-    res_anchor = []
     query = request.args.get('query', '')
     if len(query) == 0:
-      return jsonify(res)
+        return jsonify(res)
     # BEGIN SOLUTION
 
     #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@FIRST TRY@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    body = search_body()
-    title = search_title()
-    anchor = search_anchor()
-    #
-    # print(body.get_data())
-    # res = body
+    #query = query.lower()
+    body = help_search_body(query)
+    title = help_search_title(query) # (wiki_id, query freq in title)
+    anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
+    try:
+        anchor_max_value = anchor[0][1]
+        anchor_with_weigths = list(map((lambda x:tuple((x[0],x[1]/anchor_max_value))),anchor))
+    except e:
+        print(e)
 
-    # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@SECOND TRY@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    res = Counter()
+    try:
+        for page_id,value in body:
+            res[page_id]+=value
+    except:
+        pass
+    try:
+        for page_id,value in title:
+            res[page_id]+=value
+    except:
+        pass
+    try:
+        for page_id,value in anchor_with_weigths:
+            res[page_id]+=value
+    except:
+        pass
 
 
+    id_title_dict = get_id_title_dict()
 
-    # res=[tuple('Anarchism')]
+    if len(res)<100:
+        if len(res)==0:
+            res = Counter(id_rank_dict)
+            return jsonify(res.most_common(100))
+        else:
+            best_ranks = Counter(id_rank_dict)
+            best_ranks = best_ranks.most_common(100-len(res))
+            try:
+                res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res.most_common()))
+            except:
+                pass
+            try:
+                res = res + list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), best_ranks))
+            except:
+                for page_id, value in best_ranks:
+                    try:
+                        res.append(tuple((page_id, id_title_dict[page_id])))
+                    except:
+                        pass
+        return jsonify(res)
+    res = res.most_common(100)
+
+    try:
+        res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
+    except:
+        new_res=[]
+        for page_id,value in res:
+            try:
+                new_res.append(tuple((page_id,id_title_dict[page_id])))
+            except:
+                pass
+        res=new_res
+
+
     # END SOLUTION
-    # return jsonify(res)
-    return res
+    return jsonify(res)
+
+
+
 @app.route("/search_body")
 def search_body():
     ''' Returns up to a 100 search results for the query using TFIDF AND COSINE
@@ -83,9 +134,26 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
 
+    res = help_search_body(query)[:100]
+
+    id_title_dict = get_id_title_dict()
+
+    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
+
+    # END SOLUTION
+    return jsonify(res)
+
+def help_search_body(q,is_tokenized=False):
+    '''
+
+    :param q: query
+    :return: a list of sorted tuples(sorted by cosim value), each tuple (wiki_id,cosim(wiki_id,q)
+    '''
     N=6348910 #number of pages in corpus
 
-    tokenized_query = tokenize(query)
+    if not is_tokenized:
+        q = tokenize(q)
+    tokenized_query = q
     query_words_freq = Counter(tokenized_query)
 
     index_name = 'body_index'
@@ -109,32 +177,23 @@ def search_body():
         denominator_query+= math.pow(weight_word_query,2)
 
         posting_list = read_posting_list(inverted_index, word,index_base_dir)
-
-        df = inverted_index.df[word]
+        try:
+            df = inverted_index.df[word]
+        except:#TODO: WHAT ABOUT RARE WORDS???? LETS BUILD INVERTED INDEX FOR THEN, IF A RARE WORD LIKE "Elbaz" in query maybe we need to return the page with that rare word ?
+            continue
         idf = math.log(N/df,2)
         for page_id,word_freq in posting_list:
-
             #normalized tf (by the length of document)
             tf = (word_freq/id_len_dict[page_id])
             weight_word_page = tf*idf
             mone[page_id] += weight_word_page*weight_word_query
             denominator_docs[page_id] += math.pow(weight_word_page,2)
 
-
     cosim= Counter()
     for page_id in mone.keys():
         cosim[page_id] = mone[page_id]/(math.sqrt(denominator_docs[page_id]*denominator_query))
 
-    res = cosim.most_common(100)
-    path_to_id_title_dict_pickle ='id_title_dict.pickle'
-    id_title_dict = {}
-    with open(path_to_id_title_dict_pickle, 'rb') as f:
-        id_title_dict = pickle.loads(f.read())
-
-    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
-
-    # END SOLUTION
-    return jsonify(res)
+    return cosim.most_common()
 
 @app.route("/search_title")
 def search_title():
@@ -159,18 +218,23 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     query = query.lower()
-    posting_lists = get_posting_lists(query,'index_title',base_dir='index_title')
+    posting_lists = help_search_title(query)
     #each element is (id,tf) and we want it to be --> (id,title)
-    #res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
 
-    path_to_id_title_dict_pickle ='id_title_dict.pickle'
-    id_title_dict = {}
-    with open(path_to_id_title_dict_pickle, 'rb') as f:
-        id_title_dict = pickle.loads(f.read())
+
+    id_title_dict = get_id_title_dict()
     res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
-    #res = list(map(lambda x: tuple((x[0], get_wiki_title_from_id(x[0]))), posting_lists))
+
     # END SOLUTION
     return jsonify(res)
+
+def help_search_title(q,is_tokenized=False):
+    '''
+
+    :param q: query
+    :return: a list of sorted tuples(sorted by term freq in title of page id), each tuple (wiki_id,term freq in title)
+    '''
+    return get_posting_lists(q,'index_title',base_dir='index_title')
 
 @app.route("/search_anchor")
 def search_anchor():
@@ -197,12 +261,10 @@ def search_anchor():
 
     # BEGIN SOLUTION
     query = query.lower()
-    posting_lists = get_posting_lists(query,'index_anchor',base_dir='index_anchor')
+    posting_lists = help_search_anchor(query)
+
     #each element is (id,tf) and we want it to be --> (id,title)
-    path_to_id_title_dict_pickle ='id_title_dict.pickle'
-    id_title_dict = {}
-    with open(path_to_id_title_dict_pickle, 'rb') as f:
-        id_title_dict = pickle.loads(f.read())
+    id_title_dict = get_id_title_dict()
 
 #TODO: FILTER THEN MAP
     for i in posting_lists:
@@ -211,11 +273,24 @@ def search_anchor():
             res.append(curr_tup)
     # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
 
-    # res = list(map(lambda x:tuple((x[0],get_wiki_title_from_id(x[0]))),posting_lists))
 
     # END SOLUTION
 
     return jsonify(res)
+
+def help_search_anchor(q):
+    '''
+
+    :param q: query
+    :return: a list of sorted tuples(sorted by query terms freq in page ID), each tuple (wiki_id,query terms freq in page ID)
+    '''
+    return get_posting_lists(q,'index_anchor',base_dir='index_anchor')
+
+path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
+with open(path_to_id_rank_dict_pickle, 'rb') as f:
+    global id_rank_dict
+    id_rank_dict = pickle.loads(f.read())
+
 
 @app.route("/get_pagerank", methods=['POST'])
 def get_pagerank():
@@ -239,16 +314,26 @@ def get_pagerank():
       return jsonify(res)
     # BEGIN SOLUTION
 
-    path_to_id_rank_dict_pickle = 'id_title_dict.pickle'
-    id_rank_dict = {}
-    with open(path_to_id_rank_dict_pickle, 'rb') as f:
-        id_rank_dict = pickle.loads(f.read())
-    res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
+    # path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
+    # id_rank_dict = {}
+    # with open(path_to_id_rank_dict_pickle, 'rb') as f:
+    #     id_rank_dict = pickle.loads(f.read())
+    try:
+        res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
+    except:
+        for pageID in wiki_ids:
+            try:
+                res.append(id_rank_dict[pageID])
+            except:
+                res.append(0)
 
     # END SOLUTION
     return jsonify(res)
-    # END SOLUTION
-    return jsonify(res)
+
+
+with open('pageviews-202108-user.pkl', 'rb') as f:
+    global wid2pv
+    wid2pv = pickle.loads(f.read())
 
 @app.route("/get_pageview", methods=['POST'])
 def get_pageview():
@@ -273,15 +358,25 @@ def get_pageview():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+
     # read in the counter
-    with open('pageviews-202108-user.pkl', 'rb') as f:
-        wid2pv = pickle.loads(f.read())
-    for pageID in wiki_ids:
-        try:
-            res.append(wid2pv[pageID])
-        except:
-            print("HEEEELLLOOOO !!!!!!! INVALID INPUT ! WHAT ARE U DOING ?!?!?!?!?!")
-            break
+    # t_start=time.time()
+
+    # with open('pageviews-202108-user.pkl', 'rb') as f:
+    #     wid2pv = pickle.loads(f.read())
+
+    # duration = time.time()-t_start
+    # print(duration)
+    try:
+        res = list(map(lambda x: (wid2pv[x]), wiki_ids))
+    except:
+        for pageID in wiki_ids:
+            try:
+                res.append(wid2pv[pageID])
+            except:
+                print("HEEEELLLOOOO !!!!!!! There is no page with this ", pageID, " wiki_id")
+                pass
+
     # END SOLUTION
     return jsonify(res)
 
@@ -289,19 +384,12 @@ def get_pageview():
 import requests
 import bs4
 
-def get_wiki_title_from_id(wiki_id):
-    '''
-
-    :param wiki_id: page id
-    :return: page title
-    '''
-    url = "https://en.wikipedia.org/?curid="+str(wiki_id)
-
-    r = requests.get(url)
-    html = bs4.BeautifulSoup(r.text,features="lxml")
-    long_title = html.title.text
-    return long_title[:len(long_title)-12]
-
+def get_id_title_dict():
+    path_to_id_title_dict_pickle ='id_title_dict.pickle'
+    id_title_dict = {}
+    with open(path_to_id_title_dict_pickle, 'rb') as f:
+        id_title_dict = pickle.loads(f.read())
+    return id_title_dict
 
 ##############################################
 
@@ -317,7 +405,8 @@ def get_posting_lists(query,index_name,base_dir=''):
     inverted_title = inverted_index_colab.InvertedIndex.read_index(base_dir, index_name)
     #posting_lists = where each element is a tuple (wiki_id, tf)
     posting_lists=[]
-    for word in query.split():
+    query = tokenize(query)
+    for word in query:
         posting_list = read_posting_list(inverted_title, word,index_name)
         posting_lists = posting_lists + posting_list
 
