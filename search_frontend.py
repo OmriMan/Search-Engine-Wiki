@@ -89,11 +89,17 @@ def search_title():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    query = query.lower()
     posting_lists = get_posting_lists(query,'index_title',base_dir='index_title')
     #each element is (id,tf) and we want it to be --> (id,title)
     #res = list(map(lambda x:tuple((x[0],wikipedia.page(pageid=x[0],auto_suggest=True,redirect=True).title)),posting_lists))
-    res = list(map(lambda x: tuple((x[0], get_wiki_title_from_id(x[0]))), posting_lists))
+
+    path_to_id_title_dict_pickle ='id_title_dict.pickle'
+    id_title_dict = {}
+    with open(path_to_id_title_dict_pickle, 'rb') as f:
+        id_title_dict = pickle.loads(f.read())
+    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+    #res = list(map(lambda x: tuple((x[0], get_wiki_title_from_id(x[0]))), posting_lists))
     # END SOLUTION
     return jsonify(res)
 
@@ -121,9 +127,15 @@ def search_anchor():
       return jsonify(res)
 
     # BEGIN SOLUTION
+    query = query.lower()
     posting_lists = get_posting_lists(query,'index_anchor',base_dir='index_anchor')
     #each element is (id,tf) and we want it to be --> (id,title)
-    res = list(map(lambda x:tuple((x[0],get_wiki_title_from_id(x[0])))),posting_lists)
+    path_to_id_title_dict_pickle ='id_title_dict.pickle'
+    id_title_dict = {}
+    with open(path_to_id_title_dict_pickle, 'rb') as f:
+        id_title_dict = pickle.loads(f.read())
+    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+    # res = list(map(lambda x:tuple((x[0],get_wiki_title_from_id(x[0]))),posting_lists))
 
     # END SOLUTION
 
@@ -151,6 +163,14 @@ def get_pagerank():
       return jsonify(res)
     # BEGIN SOLUTION
 
+    path_to_id_rank_dict_pickle = 'id_title_dict.pickle'
+    id_rank_dict = {}
+    with open(path_to_id_rank_dict_pickle, 'rb') as f:
+        id_rank_dict = pickle.loads(f.read())
+    res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
+
+    # END SOLUTION
+    return jsonify(res)
     # END SOLUTION
     return jsonify(res)
 
