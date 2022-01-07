@@ -1,10 +1,14 @@
+import math
 import pickle
+import re
 from collections import Counter
 from pathlib import Path
 
 import inverted_index_colab
 from flask import Flask, request, jsonify
-import wikipedia
+
+
+from nltk.corpus import stopwords
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -63,6 +67,58 @@ def search_body():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+
+    N=6348910 #number of pages in corpus
+
+
+
+    tokenized_query = tokenize(query)
+    query_words_freq = Counter(tokenized_query)
+
+    index_name = 'body_index'
+    index_base_dir = 'body_index'
+    inverted_index = inverted_index_colab.InvertedIndex.read_index(index_base_dir, index_name)
+
+    #get the length of each page in corpus
+    path_to_id_len_dict_pickle ='id_doclen_dict.pickle'
+    id_len_dict = {}
+    with open(path_to_id_len_dict_pickle, 'rb') as f:
+        id_len_dict = pickle.loads(f.read())
+
+    mone = Counter()
+    denominator_docs = Counter()#mechane part a
+    denominator_query = 0  # mechane part b
+    weight_word_query=0
+    for word in tokenized_query:
+
+        #posting_list --> list that each element is(doc_id,term freq in doc)
+        weight_word_query = query_words_freq[word]/len(tokenized_query)
+        denominator_query+= math.pow(weight_word_query,2)
+
+        posting_list = read_posting_list(inverted_index, word,index_base_dir)
+
+        df = inverted_index.df[word]
+        idf = math.log(N/df,2)
+        for page_id,word_freq in posting_list:
+
+            #normalized tf (by the length of document)
+            tf = (word_freq/id_len_dict[page_id])
+            weight_word_page = tf*idf
+            mone[page_id] += weight_word_page*weight_word_query
+            denominator_docs[page_id] += math.pow(weight_word_page,2)
+
+
+    cosim= Counter()
+    for page_id in mone.keys():
+        cosim[page_id] = mone[page_id]/(math.sqrt(denominator_docs[page_id]*denominator_query))
+
+    res = cosim.most_common(100)
+    path_to_id_title_dict_pickle ='id_title_dict.pickle'
+    id_title_dict = {}
+    with open(path_to_id_title_dict_pickle, 'rb') as f:
+        id_title_dict = pickle.loads(f.read())
+
+    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
 
     # END SOLUTION
     return jsonify(res)
@@ -273,6 +329,34 @@ def read_posting_list(inverted, w,base_dir=''):
         return posting_list
     except:
         return []
+
+###########################################################
+
+def tokenize(text):
+    """
+    This function aims in tokenize a text into a list of tokens. Moreover, it filter stopwords.
+
+    Parameters:
+    -----------
+    text: string , represting the text to tokenize.
+
+    Returns:
+    -----------
+    list of tokens (e.g., list of tokens).
+    """
+    english_stopwords = frozenset(stopwords.words('english'))
+    corpus_stopwords = ["category", "references", "also", "external", "links",
+                        "may", "first", "see", "history", "people", "one", "two",
+                        "part", "thumb", "including", "second", "following",
+                        "many", "however", "would", "became"]
+
+    all_stopwords = english_stopwords.union(corpus_stopwords)
+    RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
+
+    list_of_tokens = [token.group() for token in RE_WORD.finditer(text.lower()) if
+                      token.group() not in all_stopwords]
+    return list_of_tokens
+
 
 
 if __name__ == '__main__':
