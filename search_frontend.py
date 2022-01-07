@@ -231,7 +231,7 @@ def get_wiki_title_from_id(wiki_id):
 
 def get_posting_lists(query,index_name,base_dir=''):
     '''
-
+    Returns relevant postings lists for the given query
     :param query: input query
     :param index_name: body/title/anchor_text
     :param base_dir: path to the XXX.bin file
@@ -273,6 +273,9 @@ def read_posting_list(inverted, w,base_dir=''):
         return posting_list
     except:
         return []
+
+
+
 
 
 if __name__ == '__main__':
