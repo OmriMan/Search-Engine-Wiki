@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 import inverted_index_colab
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, json
 
 
 from nltk.corpus import stopwords
@@ -37,15 +37,30 @@ def search():
         element is a tuple (wiki_id, title).
     '''
     res = []
+    res_body = []
+    res_title = []
+    res_anchor = []
     query = request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
 
-    res=[tuple('Anarchism')]
-    # END SOLUTION
-    return jsonify(res)
+    #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@FIRST TRY@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    body = search_body()
+    title = search_title()
+    anchor = search_anchor()
+    #
+    # print(body.get_data())
+    # res = body
 
+    # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@SECOND TRY@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+
+    # res=[tuple('Anarchism')]
+    # END SOLUTION
+    # return jsonify(res)
+    return res
 @app.route("/search_body")
 def search_body():
     ''' Returns up to a 100 search results for the query using TFIDF AND COSINE
@@ -69,8 +84,6 @@ def search_body():
     # BEGIN SOLUTION
 
     N=6348910 #number of pages in corpus
-
-
 
     tokenized_query = tokenize(query)
     query_words_freq = Counter(tokenized_query)
@@ -190,7 +203,14 @@ def search_anchor():
     id_title_dict = {}
     with open(path_to_id_title_dict_pickle, 'rb') as f:
         id_title_dict = pickle.loads(f.read())
-    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+
+#TODO: FILTER THEN MAP
+    for i in posting_lists:
+        if i[0] in id_title_dict:
+            curr_tup = tuple((i[0], id_title_dict[i[0]]))
+            res.append(curr_tup)
+    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+
     # res = list(map(lambda x:tuple((x[0],get_wiki_title_from_id(x[0]))),posting_lists))
 
     # END SOLUTION
