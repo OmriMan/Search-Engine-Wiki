@@ -147,6 +147,12 @@ def search_body():
     # END SOLUTION
     return jsonify(res)
 
+
+path_to_id_len_dict_pickle ='id_len_dict_big.pickle'
+with open(path_to_id_len_dict_pickle, 'rb') as f:
+    global id_len_dict
+    id_len_dict = pickle.loads(f.read())
+
 def help_search_body(q,is_tokenized=False):
     '''
 
@@ -165,10 +171,10 @@ def help_search_body(q,is_tokenized=False):
     inverted_index = inverted_index_colab.InvertedIndex.read_index(index_base_dir, index_name)
 
     #get the length of each page in corpus
-    path_to_id_len_dict_pickle ='id_doclen_dict.pickle'
-    id_len_dict = {}
-    with open(path_to_id_len_dict_pickle, 'rb') as f:
-        id_len_dict = pickle.loads(f.read())
+    # path_to_id_len_dict_pickle ='id_doclen_dict.pickle'
+    # id_len_dict = {}
+    # with open(path_to_id_len_dict_pickle, 'rb') as f:
+    #     id_len_dict = pickle.loads(f.read())
 
     mone = Counter()
     denominator_docs = Counter()#mechane part a
