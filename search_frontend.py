@@ -47,6 +47,40 @@ def search():
     body = help_search_body(query)
     title = help_search_title(query) # (wiki_id, query freq in title)
     anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
+
+    # Gets all the relevant ids together
+    all_relevant_ids = [i[0] for i in body]
+    all_relevant_ids.extend([i[0] for i in title if i not in all_relevant_ids])
+    all_relevant_ids.extend([i[0] for i in anchor if i not in all_relevant_ids])
+
+    print(all_relevant_ids)
+
+    # Find page rank for all the ids
+    page_ranks = help_get_pagerank(all_relevant_ids)
+    max_page_rank = max(page_ranks)
+
+    # Create tuples of (doc_id, normalized page rank)
+    id_page_ranks = []
+    for i in range(len(all_relevant_ids)):
+        id_page_ranks.append((all_relevant_ids[i], page_ranks[i]/max_page_rank))
+
+    # Find page view for all the ids
+    page_views = help_page_views(all_relevant_ids)
+    max_page_view = max(page_views)
+
+    # Create tuples of (doc_id, normalized page view)
+    id_page_views = []
+    for i in range(len(all_relevant_ids)):
+        id_page_views.append((all_relevant_ids[i], page_views[i] / max_page_view))
+
+
+    sorted(id_page_ranks, key=lambda x:x[1], reverse=True)
+    sorted(id_page_views, key=lambda x:x[1], reverse=True)
+
+    print(id_page_ranks)
+    print(id_page_views)
+
+
     try:
         anchor_max_value = anchor[0][1]
         anchor_normalized = list(map((lambda x:tuple((x[0],x[1]/anchor_max_value))),anchor))
@@ -54,23 +88,33 @@ def search():
         title_max_value = title[0][1]
         title_normalized = list(map((lambda x: tuple((x[0], x[1] / title_max_value))), title))
 
-    except e:
-        print(e)
-
+    except :
+        # print(e)
+        pass
     res = Counter()
     try:
         for page_id,value in body:
-            res[page_id] += value
+            res[page_id] += 3*value
     except:
         pass
     try:
         for page_id,value in title_normalized:
-            res[page_id] += value
+            res[page_id] += 3*value
     except:
         pass
     try:
         for page_id,value in anchor_normalized:
-            res[page_id] += value
+            res[page_id] += 2*value
+    except:
+        pass
+    try:
+        for page_id,value in id_page_ranks:
+            res[page_id] += 1*value
+    except:
+        pass
+    try:
+        for page_id,value in id_page_views:
+            res[page_id] += 1*value
     except:
         pass
 
@@ -328,6 +372,14 @@ def get_pagerank():
     # id_rank_dict = {}
     # with open(path_to_id_rank_dict_pickle, 'rb') as f:
     #     id_rank_dict = pickle.loads(f.read())
+
+    res = help_get_pagerank(wiki_ids)
+
+    # END SOLUTION
+    return jsonify(res)
+
+
+def help_get_pagerank(wiki_ids):
     try:
         res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
     except:
@@ -336,14 +388,13 @@ def get_pagerank():
                 res.append(id_rank_dict[pageID])
             except:
                 res.append(0)
-
-    # END SOLUTION
-    return jsonify(res)
-
+    return res
 
 with open('pageviews-202108-user.pkl', 'rb') as f:
     global wid2pv
     wid2pv = pickle.loads(f.read())
+
+
 
 @app.route("/get_pageview", methods=['POST'])
 def get_pageview():
@@ -377,6 +428,12 @@ def get_pageview():
 
     # duration = time.time()-t_start
     # print(duration)
+    res = help_page_views(wiki_ids)
+
+    # END SOLUTION
+    return jsonify(res)
+
+def help_page_views(wiki_ids):
     try:
         res = list(map(lambda x: (wid2pv[x]), wiki_ids))
     except:
@@ -384,13 +441,15 @@ def get_pageview():
             try:
                 res.append(wid2pv[pageID])
             except:
-                print("HEEEELLLOOOO !!!!!!! There is no page with this ", pageID, " wiki_id")
+                print("There is no page with this ", pageID, " wiki_id")
                 pass
 
-    # END SOLUTION
-    return jsonify(res)
+    return res
+
 
 ##############################  Help functions #########################
+
+
 
 
 def get_id_title_dict():
