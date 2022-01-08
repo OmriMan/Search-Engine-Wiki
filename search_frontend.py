@@ -49,24 +49,28 @@ def search():
     anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
     try:
         anchor_max_value = anchor[0][1]
-        anchor_with_weigths = list(map((lambda x:tuple((x[0],x[1]/anchor_max_value))),anchor))
+        anchor_normalized = list(map((lambda x:tuple((x[0],x[1]/anchor_max_value))),anchor))
+
+        title_max_value = title[0][1]
+        title_normalized = list(map((lambda x: tuple((x[0], x[1] / title_max_value))), title))
+
     except e:
         print(e)
 
     res = Counter()
     try:
         for page_id,value in body:
-            res[page_id]+=value
+            res[page_id] += value
     except:
         pass
     try:
-        for page_id,value in title:
-            res[page_id]+=value
+        for page_id,value in title_normalized:
+            res[page_id] += value
     except:
         pass
     try:
-        for page_id,value in anchor_with_weigths:
-            res[page_id]+=value
+        for page_id,value in anchor_normalized:
+            res[page_id] += value
     except:
         pass
 
@@ -381,8 +385,7 @@ def get_pageview():
     return jsonify(res)
 
 ##############################  Help functions #########################
-import requests
-import bs4
+
 
 def get_id_title_dict():
     path_to_id_title_dict_pickle ='id_title_dict.pickle'
