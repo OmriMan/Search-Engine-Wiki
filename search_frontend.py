@@ -17,6 +17,22 @@ class MyFlaskApp(Flask):
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
+###Global variables###
+
+path_to_id_len_dict_pickle ='id_len_dict_big.pickle'
+with open(path_to_id_len_dict_pickle, 'rb') as f:
+    global id_len_dict
+    id_len_dict = pickle.loads(f.read())
+
+path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
+with open(path_to_id_rank_dict_pickle, 'rb') as f:
+    global id_rank_dict
+    id_rank_dict = pickle.loads(f.read())
+
+path_to_id_views_dict_pickle = 'pageviews-202108-user.pkl'
+with open(path_to_id_views_dict_pickle, 'rb') as f:
+    global wid2pv
+    wid2pv = pickle.loads(f.read())
 
 @app.route("/search")
 def search():
@@ -42,55 +58,61 @@ def search():
         return jsonify(res)
     # BEGIN SOLUTION
 
-    #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@FIRST TRY@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    #query = query.lower()
-    body = help_search_body(query)
-    title = help_search_title(query) # (wiki_id, query freq in title)
-    anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
+    body = help_search_body(query)[:300]
+    title = help_search_title(query)[:300] # (wiki_id, query freq in title)
+    anchor = help_search_anchor(query)[:300] #(wiki_id, query freq in anchor)
+
+    #valid check
+    if ((body is None or len(body)==0) and (title is None or len(title)==0) and (anchor is None or len(anchor)==0)):
+        res = Counter(id_rank_dict)
+        return jsonify(res.most_common(100))
+
 
     # Gets all the relevant ids together
-    all_relevant_ids = [i[0] for i in body]
-    all_relevant_ids.extend([i[0] for i in title if i not in all_relevant_ids])
-    all_relevant_ids.extend([i[0] for i in anchor if i not in all_relevant_ids])
+    all_relevant_ids = list(map(lambda x:x[0],body))#[i[0] for i in body]
+    all_relevant_ids = all_relevant_ids + list(map(lambda x:x[0],title))    #.extend([i[0] for i in title if i not in all_relevant_ids])
+    #set to remove duplicate
+    all_relevant_ids = set(all_relevant_ids + list(map(lambda x:x[0],anchor))) #all_relevant_ids.extend([i[0] for i in anchor if i not in all_relevant_ids])
+    all_relevant_ids=list(all_relevant_ids)
 
-    print(all_relevant_ids)
+
+
+
 
     # Find page rank for all the ids
     page_ranks = help_get_pagerank(all_relevant_ids)
     max_page_rank = max(page_ranks)
-
-    # Create tuples of (doc_id, normalized page rank)
-    id_page_ranks = []
-    for i in range(len(all_relevant_ids)):
-        id_page_ranks.append((all_relevant_ids[i], page_ranks[i]/max_page_rank))
-
     # Find page view for all the ids
     page_views = help_page_views(all_relevant_ids)
     max_page_view = max(page_views)
 
-    # Create tuples of (doc_id, normalized page view)
-    id_page_views = []
+
+    #create 2 lists - id_page_ranks and id_page_views
+    id_page_ranks = []#each element will be tuple (wiki id,normalized page rank)
+    id_page_views = []#each element will be tuple (wiki id,normalized page view)
     for i in range(len(all_relevant_ids)):
-        id_page_views.append((all_relevant_ids[i], page_views[i] / max_page_view))
+        id_page_ranks.append((all_relevant_ids[i], page_ranks[i]/max_page_rank))# Create tuples of (doc_id, normalized page rank)
+        id_page_views.append((all_relevant_ids[i], page_views[i] / max_page_view))    # Create tuples of (doc_id, normalized page view)
 
+    id_page_ranks = sorted(id_page_ranks, key=lambda x:x[1], reverse=True)
+    id_page_views = sorted(id_page_views, key=lambda x:x[1], reverse=True)
 
-    sorted(id_page_ranks, key=lambda x:x[1], reverse=True)
-    sorted(id_page_views, key=lambda x:x[1], reverse=True)
-
-    print(id_page_ranks)
-    print(id_page_views)
-
-
+    #normalization for anchor and title
     try:
         anchor_max_value = anchor[0][1]
         anchor_normalized = list(map((lambda x:tuple((x[0],x[1]/anchor_max_value))),anchor))
 
         title_max_value = title[0][1]
         title_normalized = list(map((lambda x: tuple((x[0], x[1] / title_max_value))), title))
-
     except :
-        # print(e)
         pass
+
+    #Adding weights according to our ingenious algorithm
+    #COSINE SIMILARITY OF THE BODY OF ARTICLES - X3
+    #title - X3
+    #anchor - X2
+    #page rank - X1
+    #page views - X1
     res = Counter()
     try:
         for page_id,value in body:
@@ -118,14 +140,18 @@ def search():
     except:
         pass
 
-
+    #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
     id_title_dict = get_id_title_dict()
 
+    #if we found less than 100 results - we want to avoid a situation where we return an empty answer
+    #Then we will return the pages that have the highest ranking in the corpus
     if len(res)<100:
+        #In case we did not find any result (the query is a very rare word or a stop word)
         if len(res)==0:
             res = Counter(id_rank_dict)
             return jsonify(res.most_common(100))
         else:
+            #We will return the results we found first and then the pages with the highest ranking
             best_ranks = Counter(id_rank_dict)
             best_ranks = best_ranks.most_common(100-len(res))
             try:
@@ -141,8 +167,11 @@ def search():
                     except:
                         pass
         return jsonify(res)
-    res = res.most_common(100)
 
+
+    res = res.most_common(100)
+    #res ia a list of tuples, each tuple looks like-->(wiki_id,our greate and sophisticated rate)
+    #so we need to convert res to list of tuples but that the tuples will be in the format-->(wiki id,title)
     try:
         res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
     except:
@@ -154,10 +183,8 @@ def search():
                 pass
         res=new_res
 
-
     # END SOLUTION
     return jsonify(res)
-
 
 
 @app.route("/search_body")
@@ -182,20 +209,165 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
 
-    res = help_search_body(query)[:100]
-
+    res = help_search_body(query)
+    #up to a 100 search results
+    if (len(res)>100):
+        res=res[:100]
+    #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
     id_title_dict = get_id_title_dict()
-
     res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
 
     # END SOLUTION
     return jsonify(res)
 
 
-path_to_id_len_dict_pickle ='id_len_dict_big.pickle'
-with open(path_to_id_len_dict_pickle, 'rb') as f:
-    global id_len_dict
-    id_len_dict = pickle.loads(f.read())
+@app.route("/search_title")
+def search_title():
+    ''' Returns ALL (not just top 100) search results that contain A QUERY WORD 
+        IN THE TITLE of articles, ordered in descending order of the NUMBER OF 
+        QUERY WORDS that appear in the title. For example, a document with a 
+        title that matches two of the query words will be ranked before a 
+        document with a title that matches only one query term. 
+
+        Test this by navigating to the a URL like:
+         http://YOUR_SERVER_DOMAIN/search_title?query=hello+world
+        where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+        if you're using ngrok on Colab or your external IP on GCP.
+    Returns:
+    --------
+        list of ALL (not just top 100) search results, ordered from best to 
+        worst where each element is a tuple (wiki_id, title).
+    '''
+    res = []
+    query = request.args.get('query', '')
+    if len(query) == 0:
+      return jsonify(res)
+    # BEGIN SOLUTION
+    query = query.lower()
+    posting_lists = help_search_title(query)
+    #each element is (id,tf) and we want it to be --> (id,title)
+    #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
+    id_title_dict = get_id_title_dict()
+    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+
+    # END SOLUTION
+    return jsonify(res)
+
+
+@app.route("/search_anchor")
+def search_anchor():
+    ''' Returns ALL (not just top 100) search results that contain A QUERY WORD 
+        IN THE ANCHOR TEXT of articles, ordered in descending order of the 
+        NUMBER OF QUERY WORDS that appear in anchor text linking to the page. 
+        For example, a document with a anchor text that matches two of the 
+        query words will be ranked before a document with anchor text that 
+        matches only one query term. 
+
+        Test this by navigating to the a URL like:
+         http://YOUR_SERVER_DOMAIN/search_anchor?query=hello+world
+        where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+        if you're using ngrok on Colab or your external IP on GCP.
+    Returns:
+    --------
+        list of ALL (not just top 100) search results, ordered from best to 
+        worst where each element is a tuple (wiki_id, title).
+    '''
+    res = []
+    query = request.args.get('query', '')
+    if len(query) == 0:
+      return jsonify(res)
+
+    # BEGIN SOLUTION
+    query = query.lower()
+    posting_lists = help_search_anchor(query)
+    #each element is (id,tf) and we want it to be --> (id,title)
+    id_title_dict = get_id_title_dict()
+
+#TODO: FILTER THEN MAP
+    for i in posting_lists:
+        if i[0] in id_title_dict:
+            curr_tup = tuple((i[0], id_title_dict[i[0]]))
+            res.append(curr_tup)
+    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+
+
+    # END SOLUTION
+    return jsonify(res)
+
+
+@app.route("/get_pagerank", methods=['POST'])
+def get_pagerank():
+    ''' Returns PageRank values for a list of provided wiki article IDs. 
+
+        Test this by issuing a POST request to a URL like:
+          http://YOUR_SERVER_DOMAIN/get_pagerank
+        with a json payload of the list of article ids. In python do:
+          import requests
+          requests.post('http://YOUR_SERVER_DOMAIN/get_pagerank', json=[1,5,8])
+        As before YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+        if you're using ngrok on Colab or your external IP on GCP.
+    Returns:
+    --------
+        list of floats:
+          list of PageRank scores that correrspond to the provided article IDs.
+    '''
+    res = []
+    wiki_ids = request.get_json()
+    if len(wiki_ids) == 0:
+      return jsonify(res)
+    # BEGIN SOLUTION
+
+    # path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
+    # id_rank_dict = {}
+    # with open(path_to_id_rank_dict_pickle, 'rb') as f:
+    #     id_rank_dict = pickle.loads(f.read())
+
+    res = help_get_pagerank(wiki_ids)
+
+    # END SOLUTION
+    return jsonify(res)
+
+
+@app.route("/get_pageview", methods=['POST'])
+def get_pageview():
+    ''' Returns the number of page views that each of the provide wiki articles
+        had in August 2021.
+
+        Test this by issuing a POST request to a URL like:
+          http://YOUR_SERVER_DOMAIN/get_pageview
+        with a json payload of the list of article ids. In python do:
+          import requests
+          requests.post('http://YOUR_SERVER_DOMAIN/get_pageview', json=[1,5,8])
+        As before YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+        if you're using ngrok on Colab or your external IP on GCP.
+    Returns:
+    --------
+        list of ints:
+          list of page view numbers from August 2021 that correrspond to the 
+          provided list article IDs.
+    '''
+    res = []
+    wiki_ids = request.get_json()
+    if len(wiki_ids) == 0:
+      return jsonify(res)
+    # BEGIN SOLUTION
+
+    # read in the counter
+    # t_start=time.time()
+
+    # with open('pageviews-202108-user.pkl', 'rb') as f:
+    #     wid2pv = pickle.loads(f.read())
+
+    # duration = time.time()-t_start
+    # print(duration)
+    res = help_page_views(wiki_ids)
+
+    # END SOLUTION
+    return jsonify(res)
+
+
+
+##############################  Help functions #########################
 
 def help_search_body(q,is_tokenized=False):
     '''
@@ -249,39 +421,6 @@ def help_search_body(q,is_tokenized=False):
 
     return cosim.most_common()
 
-@app.route("/search_title")
-def search_title():
-    ''' Returns ALL (not just top 100) search results that contain A QUERY WORD 
-        IN THE TITLE of articles, ordered in descending order of the NUMBER OF 
-        QUERY WORDS that appear in the title. For example, a document with a 
-        title that matches two of the query words will be ranked before a 
-        document with a title that matches only one query term. 
-
-        Test this by navigating to the a URL like:
-         http://YOUR_SERVER_DOMAIN/search_title?query=hello+world
-        where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
-        if you're using ngrok on Colab or your external IP on GCP.
-    Returns:
-    --------
-        list of ALL (not just top 100) search results, ordered from best to 
-        worst where each element is a tuple (wiki_id, title).
-    '''
-    res = []
-    query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
-    query = query.lower()
-    posting_lists = help_search_title(query)
-    #each element is (id,tf) and we want it to be --> (id,title)
-
-
-    id_title_dict = get_id_title_dict()
-    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
-
-    # END SOLUTION
-    return jsonify(res)
-
 def help_search_title(q,is_tokenized=False):
     '''
 
@@ -289,48 +428,6 @@ def help_search_title(q,is_tokenized=False):
     :return: a list of sorted tuples(sorted by term freq in title of page id), each tuple (wiki_id,term freq in title)
     '''
     return get_posting_lists(q,'index_title',base_dir='index_title')
-
-@app.route("/search_anchor")
-def search_anchor():
-    ''' Returns ALL (not just top 100) search results that contain A QUERY WORD 
-        IN THE ANCHOR TEXT of articles, ordered in descending order of the 
-        NUMBER OF QUERY WORDS that appear in anchor text linking to the page. 
-        For example, a document with a anchor text that matches two of the 
-        query words will be ranked before a document with anchor text that 
-        matches only one query term. 
-
-        Test this by navigating to the a URL like:
-         http://YOUR_SERVER_DOMAIN/search_anchor?query=hello+world
-        where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
-        if you're using ngrok on Colab or your external IP on GCP.
-    Returns:
-    --------
-        list of ALL (not just top 100) search results, ordered from best to 
-        worst where each element is a tuple (wiki_id, title).
-    '''
-    res = []
-    query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
-
-    # BEGIN SOLUTION
-    query = query.lower()
-    posting_lists = help_search_anchor(query)
-
-    #each element is (id,tf) and we want it to be --> (id,title)
-    id_title_dict = get_id_title_dict()
-
-#TODO: FILTER THEN MAP
-    for i in posting_lists:
-        if i[0] in id_title_dict:
-            curr_tup = tuple((i[0], id_title_dict[i[0]]))
-            res.append(curr_tup)
-    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
-
-
-    # END SOLUTION
-
-    return jsonify(res)
 
 def help_search_anchor(q):
     '''
@@ -340,46 +437,12 @@ def help_search_anchor(q):
     '''
     return get_posting_lists(q,'index_anchor',base_dir='index_anchor')
 
-path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
-with open(path_to_id_rank_dict_pickle, 'rb') as f:
-    global id_rank_dict
-    id_rank_dict = pickle.loads(f.read())
-
-
-@app.route("/get_pagerank", methods=['POST'])
-def get_pagerank():
-    ''' Returns PageRank values for a list of provided wiki article IDs. 
-
-        Test this by issuing a POST request to a URL like:
-          http://YOUR_SERVER_DOMAIN/get_pagerank
-        with a json payload of the list of article ids. In python do:
-          import requests
-          requests.post('http://YOUR_SERVER_DOMAIN/get_pagerank', json=[1,5,8])
-        As before YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
-        if you're using ngrok on Colab or your external IP on GCP.
-    Returns:
-    --------
-        list of floats:
-          list of PageRank scores that correrspond to the provided article IDs.
-    '''
-    res = []
-    wiki_ids = request.get_json()
-    if len(wiki_ids) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
-
-    # path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
-    # id_rank_dict = {}
-    # with open(path_to_id_rank_dict_pickle, 'rb') as f:
-    #     id_rank_dict = pickle.loads(f.read())
-
-    res = help_get_pagerank(wiki_ids)
-
-    # END SOLUTION
-    return jsonify(res)
-
-
 def help_get_pagerank(wiki_ids):
+    '''
+
+    :param wiki_ids:
+    :return: list of PageRank scores that correrspond to the provided wiki_ids
+    '''
     try:
         res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
     except:
@@ -390,50 +453,12 @@ def help_get_pagerank(wiki_ids):
                 res.append(0)
     return res
 
-with open('pageviews-202108-user.pkl', 'rb') as f:
-    global wid2pv
-    wid2pv = pickle.loads(f.read())
-
-
-
-@app.route("/get_pageview", methods=['POST'])
-def get_pageview():
-    ''' Returns the number of page views that each of the provide wiki articles
-        had in August 2021.
-
-        Test this by issuing a POST request to a URL like:
-          http://YOUR_SERVER_DOMAIN/get_pageview
-        with a json payload of the list of article ids. In python do:
-          import requests
-          requests.post('http://YOUR_SERVER_DOMAIN/get_pageview', json=[1,5,8])
-        As before YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
-        if you're using ngrok on Colab or your external IP on GCP.
-    Returns:
-    --------
-        list of ints:
-          list of page view numbers from August 2021 that correrspond to the 
-          provided list article IDs.
-    '''
-    res = []
-    wiki_ids = request.get_json()
-    if len(wiki_ids) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
-
-    # read in the counter
-    # t_start=time.time()
-
-    # with open('pageviews-202108-user.pkl', 'rb') as f:
-    #     wid2pv = pickle.loads(f.read())
-
-    # duration = time.time()-t_start
-    # print(duration)
-    res = help_page_views(wiki_ids)
-
-    # END SOLUTION
-    return jsonify(res)
-
 def help_page_views(wiki_ids):
+    '''
+
+    :param wiki_ids:
+    :return: list of page view numbers from August 2021 that correrspond to the provided list article IDs.
+    '''
     try:
         res = list(map(lambda x: (wid2pv[x]), wiki_ids))
     except:
@@ -446,13 +471,11 @@ def help_page_views(wiki_ids):
 
     return res
 
-
-##############################  Help functions #########################
-
-
-
-
 def get_id_title_dict():
+    '''
+
+    :return: dict --> id:title
+    '''
     path_to_id_title_dict_pickle ='id_title_dict.pickle'
     id_title_dict = {}
     with open(path_to_id_title_dict_pickle, 'rb') as f:
