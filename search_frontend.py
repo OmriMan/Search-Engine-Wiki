@@ -3,21 +3,25 @@ import pickle
 import re
 from collections import Counter
 from pathlib import Path
-
-import inverted_index_colab
+import inverted_index_gcp
 from flask import Flask, request, jsonify, json
 import time
-
+import nltk
+nltk.download('stopwords')
 from nltk.corpus import stopwords
+
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
         super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
+
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
-###Global variables###
+
+###Global variables### - Reads the dictionaries
+
 
 path_to_id_len_dict_pickle ='id_len_dict_big.pickle'
 with open(path_to_id_len_dict_pickle, 'rb') as f:
@@ -33,6 +37,12 @@ path_to_id_views_dict_pickle = 'pageviews-202108-user.pkl'
 with open(path_to_id_views_dict_pickle, 'rb') as f:
     global wid2pv
     wid2pv = pickle.loads(f.read())
+
+path_to_id_title_dict_pickle = 'id_title_dict.pickle'
+with open(path_to_id_title_dict_pickle, 'rb') as f:
+    global id_title_dict
+    id_title_dict = pickle.loads(f.read())
+
 
 @app.route("/search")
 def search():
@@ -70,13 +80,10 @@ def search():
 
     # Gets all the relevant ids together
     all_relevant_ids = list(map(lambda x:x[0],body))#[i[0] for i in body]
-    all_relevant_ids = all_relevant_ids + list(map(lambda x:x[0],title))    #.extend([i[0] for i in title if i not in all_relevant_ids])
+    all_relevant_ids = all_relevant_ids + list(map(lambda x:x[0],title))
     #set to remove duplicate
-    all_relevant_ids = set(all_relevant_ids + list(map(lambda x:x[0],anchor))) #all_relevant_ids.extend([i[0] for i in anchor if i not in all_relevant_ids])
+    all_relevant_ids = set(all_relevant_ids + list(map(lambda x:x[0],anchor))) #all_relevant_
     all_relevant_ids=list(all_relevant_ids)
-
-
-
 
 
     # Find page rank for all the ids
@@ -141,7 +148,7 @@ def search():
         pass
 
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    id_title_dict = get_id_title_dict()
+    # id_title_dict = get_id_title_dict()
 
     #if we found less than 100 results - we want to avoid a situation where we return an empty answer
     #Then we will return the pages that have the highest ranking in the corpus
@@ -214,7 +221,7 @@ def search_body():
     if (len(res)>100):
         res=res[:100]
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    id_title_dict = get_id_title_dict()
+    # id_title_dict = get_id_title_dict()
     res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
 
     # END SOLUTION
@@ -247,7 +254,7 @@ def search_title():
     posting_lists = help_search_title(query)
     #each element is (id,tf) and we want it to be --> (id,title)
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    id_title_dict = get_id_title_dict()
+    # id_title_dict = get_id_title_dict()
     res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
 
     # END SOLUTION
@@ -281,7 +288,7 @@ def search_anchor():
     query = query.lower()
     posting_lists = help_search_anchor(query)
     #each element is (id,tf) and we want it to be --> (id,title)
-    id_title_dict = get_id_title_dict()
+    # id_title_dict = get_id_title_dict()
 
 #TODO: FILTER THEN MAP
     for i in posting_lists:
@@ -384,7 +391,7 @@ def help_search_body(q,is_tokenized=False):
 
     index_name = 'body_index'
     index_base_dir = 'body_index'
-    inverted_index = inverted_index_colab.InvertedIndex.read_index(index_base_dir, index_name)
+    inverted_index = inverted_index_gcp.InvertedIndex.read_index(index_base_dir, index_name)
 
     #get the length of each page in corpus
     # path_to_id_len_dict_pickle ='id_doclen_dict.pickle'
@@ -427,7 +434,7 @@ def help_search_title(q,is_tokenized=False):
     :param q: query
     :return: a list of sorted tuples(sorted by term freq in title of page id), each tuple (wiki_id,term freq in title)
     '''
-    return get_posting_lists(q,'index_title',base_dir='index_title')
+    return get_posting_lists(q,'title_index',base_dir='title_index')
 
 def help_search_anchor(q):
     '''
@@ -435,7 +442,7 @@ def help_search_anchor(q):
     :param q: query
     :return: a list of sorted tuples(sorted by query terms freq in page ID), each tuple (wiki_id,query terms freq in page ID)
     '''
-    return get_posting_lists(q,'index_anchor',base_dir='index_anchor')
+    return get_posting_lists(q,'anchor_index',base_dir='anchor_index')
 
 def help_get_pagerank(wiki_ids):
     '''
@@ -471,16 +478,16 @@ def help_page_views(wiki_ids):
 
     return res
 
-def get_id_title_dict():
-    '''
-
-    :return: dict --> id:title
-    '''
-    path_to_id_title_dict_pickle ='id_title_dict.pickle'
-    id_title_dict = {}
-    with open(path_to_id_title_dict_pickle, 'rb') as f:
-        id_title_dict = pickle.loads(f.read())
-    return id_title_dict
+# def get_id_title_dict():
+#     '''
+#
+#     :return: dict --> id:title
+#     '''
+#     path_to_id_title_dict_pickle ='id_title_dict.pickle'
+#     id_title_dict = {}
+#     with open(path_to_id_title_dict_pickle, 'rb') as f:
+#         id_title_dict = pickle.loads(f.read())
+#     return id_title_dict
 
 ##############################################
 
@@ -493,7 +500,7 @@ def get_posting_lists(query,index_name,base_dir=''):
     :return: posting list for this query, each element is tuple(wiki_id,query f)
     '''
     #loaods inverted index of title from dick or bucket or the god knows what
-    inverted_title = inverted_index_colab.InvertedIndex.read_index(base_dir, index_name)
+    inverted_title = inverted_index_gcp.InvertedIndex.read_index(base_dir, base_dir)
     #posting_lists = where each element is a tuple (wiki_id, tf)
     posting_lists=[]
     query = tokenize(query)
@@ -516,7 +523,7 @@ TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
 from contextlib import closing
 
 def read_posting_list(inverted, w,base_dir=''):
-  with closing(inverted_index_colab.MultiFileReader()) as reader:
+  with closing(inverted_index_gcp.MultiFileReader()) as reader:
     try:
         locs = inverted.posting_locs[w]
         new_locs = [tuple((base_dir + '/' + locs[0][0],locs[0][1]))]
@@ -531,6 +538,9 @@ def read_posting_list(inverted, w,base_dir=''):
         return []
 
 ###########################################################
+
+
+
 
 def tokenize(text):
     """
