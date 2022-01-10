@@ -9,11 +9,7 @@ import time
 import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
-
-import hashlib
-def _hash(s):
-    return hashlib.blake2b(bytes(s, encoding='utf8'), digest_size=5).hexdigest()
-
+# from threading import Thread
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -73,13 +69,26 @@ def search():
     # BEGIN SOLUTION
 
 
-    #body = help_search_body(query)[:300]
-    body=help_search_bodyBM25(query)
-    if len(body)>300:
+    # body = []
+    # thread_body = Thread(help_search_bodyBM25(), args=(query, body))
+    # thread_body.start()
+    #
+    # title = []
+    # thread_title = Thread(help_search_title(), args=(query, title))
+    # thread_title.start()
+    #
+    # anchor = []
+    # thread_anchor = Thread(help_search_anchor(), args=(query, anchor))
+    # thread_anchor.start()
+
+    body = help_search_bodyBM25(query)
+    if len(body) > 300:
         body=body[:300]
+
     title = help_search_title(query)# (wiki_id, query freq in title)
     if len(title)>300:
         title = title[:300]
+
     anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
     if len(anchor)>300:
         anchor=anchor[:300]
@@ -146,12 +155,12 @@ def search():
     res = Counter()
     try:
         for page_id,value in body:
-            res[page_id] += 1*value
+            res[page_id] += 3*value
     except:
         pass
     try:
         for page_id,value in title_normalized:
-            res[page_id] += 4*value
+            res[page_id] += 3*value
     except:
         pass
     try:
@@ -161,12 +170,12 @@ def search():
         pass
     try:
         for page_id,value in id_page_ranks:
-            res[page_id] += 1.5*value
+            res[page_id] += 1*value
     except:
         pass
     try:
         for page_id,value in id_page_views:
-            res[page_id] += 1.5*value
+            res[page_id] += 1*value
     except:
         pass
 
@@ -289,8 +298,6 @@ def search_title():
     posting_lists = help_search_title(query)
     #each element is (id,tf) and we want it to be --> (id,title)
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    # id_title_dict = get_id_title_dict()
-    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
 
     try:
         res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
@@ -333,16 +340,13 @@ def search_anchor():
     # BEGIN SOLUTION
     query = query.lower()
     posting_lists = help_search_anchor(query)
-    #each element is (id,tf) and we want it to be --> (id,title)
-    # id_title_dict = get_id_title_dict()
 
-#TODO: FILTER THEN MAP
+
+    #each element is (id,tf) and we want it to be --> (id,title)
     for i in posting_lists:
         if i[0] in id_title_dict:
             curr_tup = tuple((i[0], id_title_dict[i[0]]))
             res.append(curr_tup)
-    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
-
 
     # END SOLUTION
     return jsonify(res)
@@ -422,7 +426,8 @@ def get_pageview():
 
 ##############################  Help functions #########################
 
-def help_search_bodyBM25(query,is_tokenized=False):
+
+def help_search_bodyBM25(query, is_tokenized=False):
     '''
     Best Match 25.
     ----------
@@ -455,13 +460,13 @@ def help_search_bodyBM25(query,is_tokenized=False):
         for page_id,tf in posting_list:
             try:
                 numerator = idf * (tf * (k1 + 1))
-                denominator = tf + k1 * (1 - b +( self.b * id_len_dict[page_id] / AVGDL))
+                denominator = tf + k1 * (1 - b + (b * id_len_dict[page_id] / AVGDL))
                 score = numerator/denominator
                 scores[page_id] += score
             except:#there is a big big big big proclem with inverted_index_gcp
                 pass
 
-    return(scores.most_common())
+    return scores.most_common()
 
 
 
@@ -521,13 +526,14 @@ def help_search_body(q,is_tokenized=False):
 
     return cosim.most_common()
 
-def help_search_title(q,is_tokenized=False):
+def help_search_title(q, is_tokenized=False):
     '''
 
     :param q: query
     :return: a list of sorted tuples(sorted by term freq in title of page id), each tuple (wiki_id,term freq in title)
     '''
     return get_posting_lists(q,'title_index',base_dir='title_index')
+
 
 def help_search_anchor(q):
     '''
@@ -572,21 +578,10 @@ def help_page_views(wiki_ids):
 
     return res
 
-# def get_id_title_dict():
-#     '''
-#
-#     :return: dict --> id:title
-#     '''
-#     path_to_id_title_dict_pickle ='id_title_dict.pickle'
-#     id_title_dict = {}
-#     with open(path_to_id_title_dict_pickle, 'rb') as f:
-#         id_title_dict = pickle.loads(f.read())
-#     return id_title_dict
+
 
 ##############################################
-NUM_BUCKETS = 124
-def token2bucket_id(token):
-  return int(_hash(token),16) % NUM_BUCKETS
+
 
 def get_posting_lists(query,index_name,base_dir=''):
     '''
@@ -603,9 +598,6 @@ def get_posting_lists(query,index_name,base_dir=''):
     query = tokenize(query)
     for word in query:
         posting_list = read_posting_list(inverted_title, word,index_name)
-        # print(word)
-        # print(token2bucket_id(word))
-        # print(posting_list)
         posting_lists = posting_lists + posting_list
 
     #convert posting_lists to Counter (we want to remove duplicates)
