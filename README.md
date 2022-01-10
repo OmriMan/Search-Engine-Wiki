@@ -1,5 +1,5 @@
 # Information Retrieval - Search Engine Wikipedia
-Implementation of a search engine on all of english Wikipedia dump files (6 million +) as part of the Information Retrieval course of SISE department of BGU University.
+Implementation of a search engine on all of english Wikipedia dump files (6,348,910 files) as part of the Information Retrieval course of SISE department of BGU University.
 
 
 ## Table of Content
