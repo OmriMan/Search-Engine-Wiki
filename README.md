@@ -1,5 +1,5 @@
 # Advanced Topics in Programming - Maze Game GUI
-Implementation of the GUI part of the Maze Game for ATP course in SISE department of BGU University.
+Implementation of a search engine on all of english Wikipedia dump files (6 million +) as part of the Information Retrieval course of SISE department of BGU University.
 
 ![image](https://user-images.githubusercontent.com/66309521/125794350-f2e9c519-284d-49cf-a030-7d9f05db64b6.png)
 
@@ -13,15 +13,19 @@ Implementation of the GUI part of the Maze Game for ATP course in SISE departmen
 
 
 ## General Information
-This final part of the project is to train my skills in creating a fully working game with GUI using JavaFX and an **MVVM architecture** to separate the view from the business logic.
-
-Business logic for creating and solving mazes using a multi-threaded version of client-server is implemented here: [ATP-Project-PartA-PartB](https://github.com/elbamit/ATP-Project-PartA-PartB) 
+Search engine that is capable of receiving any query and returns a JSON format list of (document_id ; title) where document_id is the ID of a wikipedia page, and the corresponding page's title.
+The components of a Wikipedia page that are used for the retrieval are:
+* Title
+* Body (all the text in the page)
+* Anchor text (also called 'Hyperlink text' - text that is used to reference/link to another wiki page)
+* Page rank (by link-analysis algorithm)
+* Page view
 
 ## Technologies
 The project was written using:
 - Java JDK-15
 - JavaFX 16
-- SceneBuilder
+- 
 
 ## Algorithms used
 ### Maze Generating:
