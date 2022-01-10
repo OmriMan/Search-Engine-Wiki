@@ -72,14 +72,33 @@ def search():
         return jsonify(res)
     # BEGIN SOLUTION
 
-    body = help_search_body(query)[:300]
-    title = help_search_title(query)[:300] # (wiki_id, query freq in title)
-    anchor = help_search_anchor(query)[:300] #(wiki_id, query freq in anchor)
+
+    #body = help_search_body(query)[:300]
+    body=help_search_bodyBM25(query)
+    if len(body)>300:
+        body=body[:300]
+    title = help_search_title(query)# (wiki_id, query freq in title)
+    if len(title)>300:
+        title = title[:300]
+    anchor = help_search_anchor(query) #(wiki_id, query freq in anchor)
+    if len(anchor)>300:
+        anchor=anchor[:300]
 
     #valid check
     if ((body is None or len(body)==0) and (title is None or len(title)==0) and (anchor is None or len(anchor)==0)):
         res = Counter(id_rank_dict)
-        return jsonify(res.most_common(100))
+        res=res.most_common(150)
+        try:
+            res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
+        except:
+            new_res = []
+            for page_id, value in res:
+                try:
+                    new_res.append(tuple((page_id, id_title_dict[page_id])))
+                except:
+                    pass
+            res = new_res
+        return jsonify(res)
 
 
     # Gets all the relevant ids together
@@ -119,20 +138,20 @@ def search():
         pass
 
     #Adding weights according to our ingenious algorithm
-    #COSINE SIMILARITY OF THE BODY OF ARTICLES - X3
-    #title - X3
+    #COSINE SIMILARITY OF THE BODY OF ARTICLES - X1
+    #title - X4
     #anchor - X2
-    #page rank - X1
-    #page views - X1
+    #page rank - X1.5
+    #page views - X1.5
     res = Counter()
     try:
         for page_id,value in body:
-            res[page_id] += 3*value
+            res[page_id] += 1*value
     except:
         pass
     try:
         for page_id,value in title_normalized:
-            res[page_id] += 3*value
+            res[page_id] += 4*value
     except:
         pass
     try:
@@ -142,12 +161,12 @@ def search():
         pass
     try:
         for page_id,value in id_page_ranks:
-            res[page_id] += 1*value
+            res[page_id] += 1.5*value
     except:
         pass
     try:
         for page_id,value in id_page_views:
-            res[page_id] += 1*value
+            res[page_id] += 1.5*value
     except:
         pass
 
@@ -239,6 +258,9 @@ def search_body():
 
     # END SOLUTION
     return jsonify(res)
+
+
+
 
 
 @app.route("/search_title")
@@ -399,6 +421,49 @@ def get_pageview():
 
 
 ##############################  Help functions #########################
+
+def help_search_bodyBM25(query,is_tokenized=False):
+    '''
+    Best Match 25.
+    ----------
+    k1 : float, default 1.5
+
+    b : float, default 0.75
+    inverted index: body_index
+    :param query:
+    :param is_tokenize:
+    :return: a list of sorted tuples(sorted by score), each tuple (wiki_id,score(wiki_id,q)
+    '''
+    if not is_tokenized:
+        query = tokenize(query)
+
+    b=0.75
+    k1=1.5
+    N=6348910 #number of pages in corpus
+
+    index_name = 'body_index'
+    index_base_dir = 'body_index'
+    inverted_index = inverted_index_gcp.InvertedIndex.read_index(index_base_dir, index_name)
+    AVGDL = 320 #easy to see...
+    scores= Counter()
+    for word in query:
+        posting_list=read_posting_list(inverted_index,word,index_base_dir)
+        if posting_list==[]:
+            continue
+        df = inverted_index.df[word]
+        idf = math.log(1 + (N - df + 0.5) / (df + 0.5)+1)
+        for page_id,tf in posting_list:
+            try:
+                numerator = idf * (tf * (k1 + 1))
+                denominator = tf + k1 * (1 - b +( self.b * id_len_dict[page_id] / AVGDL))
+                score = numerator/denominator
+                scores[page_id] += score
+            except:#there is a big big big big proclem with inverted_index_gcp
+                pass
+
+    return(scores.most_common())
+
+
 
 def help_search_body(q,is_tokenized=False):
     '''
