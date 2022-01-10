@@ -2,14 +2,12 @@ import math
 import pickle
 import re
 from collections import Counter
-from pathlib import Path
 import inverted_index_gcp
-from flask import Flask, request, jsonify, json
-import time
+from flask import Flask, request, jsonify
+
 import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
-# from threading import Thread
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -19,9 +17,7 @@ class MyFlaskApp(Flask):
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
-
 ###Global variables### - Reads the dictionaries
-
 
 path_to_id_len_dict_pickle ='id_len_dict_big.pickle'
 with open(path_to_id_len_dict_pickle, 'rb') as f:
@@ -68,18 +64,6 @@ def search():
         return jsonify(res)
     # BEGIN SOLUTION
 
-
-    # body = []
-    # thread_body = Thread(help_search_bodyBM25(), args=(query, body))
-    # thread_body.start()
-    #
-    # title = []
-    # thread_title = Thread(help_search_title(), args=(query, title))
-    # thread_title.start()
-    #
-    # anchor = []
-    # thread_anchor = Thread(help_search_anchor(), args=(query, anchor))
-    # thread_anchor.start()
 
     body = help_search_bodyBM25(query)
     if len(body) > 300:
@@ -147,11 +131,11 @@ def search():
         pass
 
     #Adding weights according to our ingenious algorithm
-    #COSINE SIMILARITY OF THE BODY OF ARTICLES - X1
-    #title - X4
+    #BM25 of the body of articles - X3
+    #title - X3
     #anchor - X2
-    #page rank - X1.5
-    #page views - X1.5
+    #page rank - X1
+    #page views - X1
     res = Counter()
     try:
         for page_id,value in body:
@@ -179,8 +163,6 @@ def search():
     except:
         pass
 
-    #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    # id_title_dict = get_id_title_dict()
 
     #if we found less than 100 results - we want to avoid a situation where we return an empty answer
     #Then we will return the pages that have the highest ranking in the corpus
@@ -252,8 +234,7 @@ def search_body():
     #up to a 100 search results
     if (len(res)>100):
         res=res[:100]
-    #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
-    # id_title_dict = get_id_title_dict()
+
     try :
         res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
     except:
@@ -374,11 +355,6 @@ def get_pagerank():
       return jsonify(res)
     # BEGIN SOLUTION
 
-    # path_to_id_rank_dict_pickle = 'id_rank_dict.pickle'
-    # id_rank_dict = {}
-    # with open(path_to_id_rank_dict_pickle, 'rb') as f:
-    #     id_rank_dict = pickle.loads(f.read())
-
     res = help_get_pagerank(wiki_ids)
 
     # END SOLUTION
@@ -409,14 +385,6 @@ def get_pageview():
       return jsonify(res)
     # BEGIN SOLUTION
 
-    # read in the counter
-    # t_start=time.time()
-
-    # with open('pageviews-202108-user.pkl', 'rb') as f:
-    #     wid2pv = pickle.loads(f.read())
-
-    # duration = time.time()-t_start
-    # print(duration)
     res = help_page_views(wiki_ids)
 
     # END SOLUTION
@@ -463,7 +431,7 @@ def help_search_bodyBM25(query, is_tokenized=False):
                 denominator = tf + k1 * (1 - b + (b * id_len_dict[page_id] / AVGDL))
                 score = numerator/denominator
                 scores[page_id] += score
-            except:#there is a big big big big proclem with inverted_index_gcp
+            except:#there is a big big big big problem with inverted_index_gcp
                 pass
 
     return scores.most_common()
@@ -487,11 +455,6 @@ def help_search_body(q,is_tokenized=False):
     index_base_dir = 'body_index'
     inverted_index = inverted_index_gcp.InvertedIndex.read_index(index_base_dir, index_name)
 
-    #get the length of each page in corpus
-    # path_to_id_len_dict_pickle ='id_doclen_dict.pickle'
-    # id_len_dict = {}
-    # with open(path_to_id_len_dict_pickle, 'rb') as f:
-    #     id_len_dict = pickle.loads(f.read())
 
     mone = Counter()
     denominator_docs = Counter()#mechane part a
@@ -506,7 +469,7 @@ def help_search_body(q,is_tokenized=False):
         posting_list = read_posting_list(inverted_index, word,index_base_dir)
         try:
             df = inverted_index.df[word]
-        except:#TODO: WHAT ABOUT RARE WORDS???? LETS BUILD INVERTED INDEX FOR THEN, IF A RARE WORD LIKE "Elbaz" in query maybe we need to return the page with that rare word ?
+        except:
             continue
         idf = math.log(N/df,2)
         for page_id,word_freq in posting_list:
@@ -580,9 +543,6 @@ def help_page_views(wiki_ids):
 
 
 
-##############################################
-
-
 def get_posting_lists(query,index_name,base_dir=''):
     '''
     Returns relevant postings lists for the given query
@@ -591,7 +551,7 @@ def get_posting_lists(query,index_name,base_dir=''):
     :param base_dir: path to the XXX.bin file
     :return: posting list for this query, each element is tuple(wiki_id,query f)
     '''
-    #loaods inverted index of title from dick or bucket or the god knows what
+    #loads inverted index of title from bucket
     inverted_title = inverted_index_gcp.InvertedIndex.read_index(base_dir, base_dir)
     #posting_lists = where each element is a tuple (wiki_id, tf)
     posting_lists = []
@@ -608,7 +568,7 @@ def get_posting_lists(query,index_name,base_dir=''):
     #sort posting lists to be ordered from best to worst
     return res.most_common()
 
-###########################################################
+
 
 TUPLE_SIZE = 6
 TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
@@ -628,10 +588,6 @@ def read_posting_list(inverted, w,base_dir=''):
         return posting_list
     except:
         return []
-
-###########################################################
-
-
 
 
 def tokenize(text):
@@ -658,9 +614,6 @@ def tokenize(text):
     list_of_tokens = [token.group() for token in RE_WORD.finditer(text.lower()) if
                       token.group() not in all_stopwords]
     return list_of_tokens
-
-
-
 
 
 
