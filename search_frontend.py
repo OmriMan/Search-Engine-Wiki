@@ -10,6 +10,10 @@ import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 
+import hashlib
+def _hash(s):
+    return hashlib.blake2b(bytes(s, encoding='utf8'), digest_size=5).hexdigest()
+
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -222,7 +226,16 @@ def search_body():
         res=res[:100]
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
     # id_title_dict = get_id_title_dict()
-    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
+    try :
+        res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), res))
+    except:
+        new_res = []
+        for item in res:
+            try:
+                new_res.append(tuple((item[0], id_title_dict[item[0]])))
+            except:
+                pass
+        res = new_res
 
     # END SOLUTION
     return jsonify(res)
@@ -255,7 +268,18 @@ def search_title():
     #each element is (id,tf) and we want it to be --> (id,title)
     #we need it because we need to return list of tuples  in the format-->[(wiki id,title),(wiki id,title),...,(wiki id,title)]
     # id_title_dict = get_id_title_dict()
-    res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+    # res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+
+    try:
+        res = list(map(lambda x: tuple((x[0], id_title_dict[x[0]])), posting_lists))
+    except:
+        new_res = []
+        for item in posting_lists:
+            try:
+                new_res.append(tuple((item[0], id_title_dict[item[0]])))
+            except:
+                pass
+        res = new_res
 
     # END SOLUTION
     return jsonify(res)
@@ -416,11 +440,15 @@ def help_search_body(q,is_tokenized=False):
             continue
         idf = math.log(N/df,2)
         for page_id,word_freq in posting_list:
+
             #normalized tf (by the length of document)
-            tf = (word_freq/id_len_dict[page_id])
-            weight_word_page = tf*idf
-            mone[page_id] += weight_word_page*weight_word_query
-            denominator_docs[page_id] += math.pow(weight_word_page,2)
+            try:
+                tf = (word_freq/id_len_dict[page_id])
+                weight_word_page = tf*idf
+                mone[page_id] += weight_word_page*weight_word_query
+                denominator_docs[page_id] += math.pow(weight_word_page,2)
+            except:
+                pass
 
     cosim= Counter()
     for page_id in mone.keys():
@@ -453,6 +481,7 @@ def help_get_pagerank(wiki_ids):
     try:
         res = list(map(lambda x: (id_rank_dict[x]), wiki_ids))
     except:
+        res = []
         for pageID in wiki_ids:
             try:
                 res.append(id_rank_dict[pageID])
@@ -469,12 +498,12 @@ def help_page_views(wiki_ids):
     try:
         res = list(map(lambda x: (wid2pv[x]), wiki_ids))
     except:
+        res = []
         for pageID in wiki_ids:
             try:
                 res.append(wid2pv[pageID])
             except:
-                print("There is no page with this ", pageID, " wiki_id")
-                pass
+                res.append(0)
 
     return res
 
@@ -490,6 +519,9 @@ def help_page_views(wiki_ids):
 #     return id_title_dict
 
 ##############################################
+NUM_BUCKETS = 124
+def token2bucket_id(token):
+  return int(_hash(token),16) % NUM_BUCKETS
 
 def get_posting_lists(query,index_name,base_dir=''):
     '''
@@ -502,10 +534,13 @@ def get_posting_lists(query,index_name,base_dir=''):
     #loaods inverted index of title from dick or bucket or the god knows what
     inverted_title = inverted_index_gcp.InvertedIndex.read_index(base_dir, base_dir)
     #posting_lists = where each element is a tuple (wiki_id, tf)
-    posting_lists=[]
+    posting_lists = []
     query = tokenize(query)
     for word in query:
         posting_list = read_posting_list(inverted_title, word,index_name)
+        # print(word)
+        # print(token2bucket_id(word))
+        # print(posting_list)
         posting_lists = posting_lists + posting_list
 
     #convert posting_lists to Counter (we want to remove duplicates)
