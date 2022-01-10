@@ -31,7 +31,7 @@ he project was written using:
 ## Steps in the process:
 There are 2 main parts for creating an efficient search engine:
 
-# Preprocessing of the data:
+### Preprocessing of the data:
 Every file is tokenized and preprocessed. We then build 3 inverted index as follow:
 - Inverted index of the title with all the postings list of it saved on the disk
 - Inverted index of the body text with all the postings list of it saved on the disk
@@ -42,8 +42,8 @@ Moreover, we add dictionnary like indexes (in pickle format) as follow:
 - {document id; page length}
 - {document id; page rank}
 - {document id; page views}
-- 
-# Running the server
+
+### Running the server
 After running the server, each GET request that arrives to the server is being handled to extract the query from it. After extraction - the query is tokenized and we look for every relevant document in each of the inverted indexes and the page rank and page view. BM25 is used as a similarity technique. 
 We then combine the score from each part and return the best documents as follow - (document id; title)
 
