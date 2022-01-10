@@ -1,64 +1,65 @@
-# Advanced Topics in Programming - Maze Game GUI
-Implementation of the GUI part of the Maze Game for ATP course in SISE department of BGU University.
-
-![image](https://user-images.githubusercontent.com/66309521/125794350-f2e9c519-284d-49cf-a030-7d9f05db64b6.png)
+# Information Retrieval - Search Engine Wikipedia
+Implementation of a search engine on all of english Wikipedia dump files (6,348,910 files) as part of the Information Retrieval course of SISE department of BGU University.
 
 
 ## Table of Content
 * [General Information](#General-Information)
 * [Technologies](#Technologies)
-* [Algorithms used](#Algorithms)
-* [Download and run the Game](#Download-and-run-the-Game)
-* [ScreenShots](#ScreenShots)
+* [Access the search engine](#Access-the-search-engine)
+* [Efficiency and quality](#Efficiency-and-quality)
 
 
 ## General Information
-This final part of the project is to train my skills in creating a fully working game with GUI using JavaFX and an **MVVM architecture** to separate the view from the business logic.
+Search engine that is capable of receiving any query and returns a JSON format list of (document_id ; title) where document_id is the ID of a wikipedia page, and the corresponding page's title.
 
-Business logic for creating and solving mazes using a multi-threaded version of client-server is implemented here: [ATP-Project-PartA-PartB](https://github.com/elbamit/ATP-Project-PartA-PartB) 
-
-## Technologies
-The project was written using:
-- Java JDK-15
-- JavaFX 16
-- SceneBuilder
-
-## Algorithms used
-### Maze Generating:
-You can choose which maze generating algorithm to use.
-Choose between:
- - Simple Maze Generator - Randomly places walls to form a maze. It produces simple and not interesting mazes
- - My Maze Generator - Uses Prim's Algorithm to generate interesting mazes with dead ends.
-
-### Maze Solving:
-You can choose which maze solving algorithm to use.
-Choose between:
- - DFS - Depth First Search
- - BFS - Breadth First Search
- - Best First Search - Variation of the BFS algorithm that chooses the next cell to go to by calculating the cheapest path (a diagonal step costs more than a regular step)
-
-## Download and run the Game
-First make sure you have an updated version of JavaFX installed on your computer.
-The following steps are required before launching the game for the first time.
-- Download the entire project
-- Open it from your favorite IDE (Intellij recommended)
-- If you're using Intellij - make sure to follow these steps to configure the JavaFX with Intellij: [how to configure JavaFX with Intellij](https://www.jetbrains.com/help/idea/javafx.html#download-javafx)
-- Run and enjoy!
-
-## ScreenShots
-- Choose your game option
-![image](https://user-images.githubusercontent.com/66309521/125794721-eabab252-dacb-4d89-b0a1-f87fcf9944b0.png)
-
-- Easy Game
-![image](https://user-images.githubusercontent.com/66309521/125794991-12e3ad66-b129-4199-9c4b-e5db9df86ddd.png)
-
-- Maze Solved
-![image](https://user-images.githubusercontent.com/66309521/125795257-00f59058-ff77-4c3f-acdb-2e885430fd17.png)
-
-- Configure your desired game properties
-![image](https://user-images.githubusercontent.com/66309521/125795722-a54ce4f5-9287-47da-91fc-be676997dfa9.png)
+The components of a Wikipedia page that are used for the retrieval are:
+* Title
+* Body (all the text in the page)
+* Anchor text (also called 'Hyperlink text' - text that is used to reference/link to another wiki page)
+* Page rank (by link-analysis algorithm)
+* Page view
 
 
+## Technologies:
+he project was written using:
+- Python 3.7
+- Google Colab
+- Google Cloud Platform
+- Flask API
+- PySpark
+
+## Steps in the process:
+There are 2 main parts for creating an efficient search engine:
+
+### Preprocessing of the data:
+Every file is tokenized and preprocessed. We then build 3 inverted index as follow:
+- Inverted index of the title with all the postings list of it saved on the disk
+- Inverted index of the body text with all the postings list of it saved on the disk
+- Inverted index of the anchor text with all the postings list of it saved on the disk
+
+Moreover, we add dictionnary like indexes (in pickle format) as follow:
+- {document id; title}
+- {document id; page length}
+- {document id; page rank}
+- {document id; page views}
+
+### Running the server
+After running the server, each GET request that arrives to the server is being handled to extract the query from it. After extraction - the query is tokenized and we look for every relevant document in each of the inverted indexes and the page rank and page view. BM25 is used as a similarity technique. 
+We then combine the score from each part and return the best documents as follow - (document id; title)
+
+## Access the search engine:
+The search engine will be available to access during a 2 day testing period from Tuesday, Jan 11, 2022 at 12:00 to Thursday, Jan 13, 2022 at 12:00 (noon) on IST time zone (Israel).
+
+To issue a query navigate to URL and change the value after query=:
+http://YOUR_SERVER_DOMAIN/search?query=hello+world
+
+Or you can issue a get request to this URL: YOUR_SERVER_DOMAIN with a jayson payload of the query.
+
+## Efficiency and quality
+
+![image](https://user-images.githubusercontent.com/66309521/148806792-352ace17-7523-4924-a49e-edb52f49d88b.png)
+
+![image](https://user-images.githubusercontent.com/66309521/148806819-8d45db77-d1ad-45e9-a19f-437171ddd3ef.png)
 
 
 
